@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { createClient } from "@supabase/supabase-js"; // Import Supabase
+import { createClient } from "@supabase/supabase-js"; 
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -11,12 +11,12 @@ import {
   BarChart3, 
   Briefcase,
   Calculator,
-  LogOut // New Icon
+  LogOut 
 } from "lucide-react";
 import { useTrades } from "../context/TradeContext";
 import RiskCalculator from "./RiskCalculator"; 
 
-// Initialize Client
+// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -31,17 +31,19 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter(); // For redirecting after logout
-  const { accounts, activeAccountId } = useTrades();
-  const activeAccount = accounts.find(a => a.id === activeAccountId);
+  const router = useRouter(); 
+  const { activeAccount } = useTrades(); // Now getting the full account object
   
   const [isCalcOpen, setIsCalcOpen] = useState(false);
 
   // --- LOGOUT LOGIC ---
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/login"); // Send back to login screen
+    router.push("/login"); 
   };
+
+  // Helper: Is the account in profit?
+  const isProfit = activeAccount ? (activeAccount.currentBalance || 0) >= activeAccount.initialBalance : true;
 
   return (
     <>
@@ -94,22 +96,48 @@ export default function Sidebar() {
         <div className="border-t border-white/5 p-4 space-y-3">
           
           {/* Account Badge */}
-          <div className="flex items-center gap-3 bg-black/20 p-3 rounded-card border border-white/5">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center">
-              <Briefcase className="w-5 h-5 text-white" />
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-bold truncate">
-                {activeAccount ? activeAccount.name : "Loading..."}
-              </p>
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-success shadow-glow-green"></span>
-                <p className="text-xs text-text-muted truncate">
-                  {activeAccount ? activeAccount.type : "Account"}
-                </p>
+          {activeAccount ? (
+            <div className="bg-black/20 p-3 rounded-card border border-white/5 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center shrink-0">
+                  <Briefcase className="w-5 h-5 text-white" />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-sm font-bold truncate text-text-main">
+                    {activeAccount.name}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-success shadow-glow-green"></span>
+                    <p className="text-xs text-text-muted truncate">
+                      {activeAccount.type}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* LIVE BALANCE BAR */}
+              <div className="pt-3 border-t border-white/5">
+                 <div className="flex justify-between items-end mb-1">
+                    <span className="text-[10px] text-text-muted uppercase font-bold">Equity</span>
+                    <span className={`font-mono text-sm font-bold ${isProfit ? 'text-success' : 'text-danger'}`}>
+                        ${activeAccount.currentBalance?.toLocaleString()}
+                    </span>
+                 </div>
+                 <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    {/* Progress Bar Visual (Optional - remove if too fancy) */}
+                    <div 
+                      className={`h-full ${isProfit ? 'bg-success' : 'bg-danger'}`} 
+                      style={{ width: `${Math.min(((activeAccount.currentBalance || 0) / activeAccount.initialBalance) * 100, 100)}%` }}
+                    ></div>
+                 </div>
+                 <div className="text-right mt-1">
+                    <span className="text-[10px] text-text-muted">Target: ${activeAccount.initialBalance.toLocaleString()}</span>
+                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+             <div className="p-3 text-center text-xs text-text-muted animate-pulse">Loading Account...</div>
+          )}
 
           {/* Logout Button */}
           <button 
