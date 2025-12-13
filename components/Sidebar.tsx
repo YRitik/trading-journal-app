@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { createClient } from "@supabase/supabase-js"; // Import Supabase
 import { 
   LayoutDashboard, 
   BookOpen, 
   Wallet, 
   BarChart3, 
   Briefcase,
-  Calculator 
+  Calculator,
+  LogOut // New Icon
 } from "lucide-react";
 import { useTrades } from "../context/TradeContext";
-import RiskCalculator from "./RiskCalculator"; // Changed Import
+import RiskCalculator from "./RiskCalculator"; 
+
+// Initialize Client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -23,14 +31,20 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter(); // For redirecting after logout
   const { accounts, activeAccountId } = useTrades();
   const activeAccount = accounts.find(a => a.id === activeAccountId);
   
   const [isCalcOpen, setIsCalcOpen] = useState(false);
 
+  // --- LOGOUT LOGIC ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login"); // Send back to login screen
+  };
+
   return (
     <>
-      {/* Updated Component */}
       <RiskCalculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} />
 
       <div className="flex h-screen w-64 flex-col border-r border-white/5 bg-surface text-text-main">
@@ -64,7 +78,6 @@ export default function Sidebar() {
             );
           })}
 
-          {/* Tools Section */}
           <div className="pt-4 mt-4 border-t border-white/5">
             <p className="px-3 text-xs font-bold text-text-muted uppercase mb-2">Tools</p>
             <button
@@ -77,8 +90,10 @@ export default function Sidebar() {
           </div>
         </nav>
 
-        {/* User Account */}
-        <div className="border-t border-white/5 p-4">
+        {/* User Account + Logout */}
+        <div className="border-t border-white/5 p-4 space-y-3">
+          
+          {/* Account Badge */}
           <div className="flex items-center gap-3 bg-black/20 p-3 rounded-card border border-white/5">
             <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center">
               <Briefcase className="w-5 h-5 text-white" />
@@ -95,6 +110,15 @@ export default function Sidebar() {
               </div>
             </div>
           </div>
+
+          {/* Logout Button */}
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+          >
+            <LogOut className="w-3 h-3" /> Sign Out
+          </button>
+
         </div>
       </div>
     </>

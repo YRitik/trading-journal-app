@@ -3,14 +3,13 @@
 import StatsCard from "../components/StatsCard";
 import EquityChart from "../components/EquityChart";
 import RecentTrades from "../components/RecentTrades";
-import MarketTicker from "../components/MarketTicker"; // 1. Import the Ticker
+import MarketTicker from "../components/MarketTicker"; 
 import { Wallet, TrendingUp, Activity, PieChart } from "lucide-react";
 import { useTrades } from "../context/TradeContext";
 
 export default function Home() {
   const { trades, totalBalance } = useTrades();
 
-  // --- MATH SECTION ---
   const netProfit = trades.reduce((acc, trade) => acc + trade.pnl, 0);
   const totalTrades = trades.length;
   const winningTrades = trades.filter(t => t.pnl > 0).length;
@@ -18,14 +17,12 @@ export default function Home() {
   const isProfitable = netProfit >= 0;
 
   return (
-    <div className="p-8 space-y-8">
-      
-      {/* 2. Insert the Ticker at the very top */}
+    <div className="p-8 space-y-8 animate-in fade-in duration-500">
       <MarketTicker />
 
       <div>
         <h1 className="text-3xl font-bold text-text-main mb-2">Dashboard</h1>
-        <p className="text-text-muted">Welcome back, Trader One. Here is your daily overview.</p>
+        <p className="text-text-muted">Welcome back. Here is your daily overview.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

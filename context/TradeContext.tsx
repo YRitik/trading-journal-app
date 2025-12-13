@@ -1,39 +1,45 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-// --- TYPES ---
+// Initialize Supabase
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export interface Trade {
   id: number;
-  accountId: string;  // Links trade to a specific account (e.g., FTMO Challenge)
-  pair: string;       // e.g., XAUUSD
+  user_id?: string;
+  account_id: string;
+  pair: string;
   type: "Buy" | "Sell";
   entry: number;
   exit: number;
-  stopLoss: number;   // New Field
-  lotSize: number;    // New Field
+  stop_loss: number;
+  lot_size: number;
   pnl: number;
-  status: "Win" | "Loss" | "BE"; // Status logic
-  date: string;       // Format: "YYYY-MM-DD" (Crucial for Calendar)
-  tags: string[];     // AI Psychology Tags
-  notes: string;      // User's journal notes
+  status: "Win" | "Loss" | "BE";
+  date: string;
+  tags: string[];
+  notes: string;
 }
 
 export interface Account {
   id: string;
-  name: string;      // e.g., "FTMO 100k"
-  type: string;      // e.g., "Challenge" or "Funded"
+  name: string;
+  type: string;
   initialBalance: number;
 }
 
 interface TradeContextType {
-  trades: Trade[]; // Only returns trades for the ACTIVE account
+  trades: Trade[];
   accounts: Account[];
   activeAccountId: string;
   switchAccount: (id: string) => void;
   addAccount: (name: string, balance: number, type: string) => void;
-  addTrade: (trade: Omit<Trade, "id" | "accountId">) => void;
+  addTrade: (trade: any) => void;
   deleteTrade: (id: number) => void;
   totalBalance: number;
 }
@@ -41,91 +47,101 @@ interface TradeContextType {
 const TradeContext = createContext<TradeContextType | undefined>(undefined);
 
 export function TradeProvider({ children }: { children: ReactNode }) {
-  // 1. Initialize Accounts (Default to one Personal account)
   const [accounts, setAccounts] = useState<Account[]>([{ 
-    id: "default", 
-    name: "Main Account", 
-    type: "Personal", 
-    initialBalance: 100000 
+    id: "default", name: "Main Account", type: "Personal", initialBalance: 100000 
   }]);
-  
   const [activeAccountId, setActiveAccountId] = useState("default");
-  const [allTrades, setAllTrades] = useState<Trade[]>([]); // Stores trades for ALL accounts
+  const [allTrades, setAllTrades] = useState<Trade[]>([]);
 
-  // --- PERSISTENCE (Load from LocalStorage) ---
+  // --- 1. FETCH TRADES FROM CLOUD ---
   useEffect(() => {
-    // Load Accounts
-    const savedAccounts = localStorage.getItem("myAccounts");
-    if (savedAccounts) {
-      setAccounts(JSON.parse(savedAccounts));
-    }
+    const fetchTrades = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // Load Trades
-    const savedTrades = localStorage.getItem("myTrades");
-    if (savedTrades) {
-      setAllTrades(JSON.parse(savedTrades));
-    }
+      const { data, error } = await supabase
+        .from('trades')
+        .select('*')
+        .order('id', { ascending: false }); // Newest first
+
+      if (data) {
+        // Map database fields to our app's format if needed
+        const formattedTrades = data.map(t => ({
+          ...t,
+          stopLoss: t.stop_loss, // Fix casing difference
+          lotSize: t.lot_size,   // Fix casing difference
+          exit: t.exit_price     // Fix naming difference
+        }));
+        setAllTrades(formattedTrades);
+      }
+    };
+
+    fetchTrades();
   }, []);
 
-  // --- SAVE TO DISK (Run whenever data changes) ---
-  useEffect(() => {
-    if (accounts.length > 0) {
-      localStorage.setItem("myAccounts", JSON.stringify(accounts));
+  // --- 2. ADD TRADE TO CLOUD ---
+  const addTrade = async (newTradeData: any) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Prepare data for DB (Snake_case)
+    const dbTrade = {
+      user_id: user.id,
+      account_id: activeAccountId,
+      pair: newTradeData.pair,
+      type: newTradeData.type,
+      entry: newTradeData.entry,
+      exit_price: newTradeData.exit, // DB expects 'exit_price'
+      stop_loss: newTradeData.stopLoss,
+      lot_size: newTradeData.lotSize,
+      pnl: newTradeData.pnl,
+      status: newTradeData.status,
+      date: newTradeData.date,
+      tags: newTradeData.tags,
+      notes: newTradeData.notes
+    };
+
+    // Insert into Supabase
+    const { data, error } = await supabase.from('trades').insert([dbTrade]).select();
+
+    if (data) {
+      // Update local state instantly so UI updates
+      const savedTrade = {
+        ...data[0],
+        stopLoss: data[0].stop_loss,
+        lotSize: data[0].lot_size,
+        exit: data[0].exit_price
+      };
+      setAllTrades([savedTrade, ...allTrades]);
     }
-  }, [accounts]);
+  };
 
-  useEffect(() => {
-    // We save even if empty, to ensure deletions work
-    localStorage.setItem("myTrades", JSON.stringify(allTrades));
-  }, [allTrades]);
+  // --- 3. DELETE TRADE FROM CLOUD ---
+  const deleteTrade = async (id: number) => {
+    // Delete from DB
+    await supabase.from('trades').delete().eq('id', id);
+    
+    // Update local UI
+    setAllTrades((prev) => prev.filter((t) => t.id !== id));
+  };
 
-
-  // --- HELPERS ---
-  
-  // Filter trades to only show the ones for the ACTIVE account
-  const activeTrades = allTrades.filter((t) => t.accountId === activeAccountId);
-
-  // Calculate Balance for the ACTIVE account
+  // --- CALCULATIONS ---
+  const activeTrades = allTrades.filter((t) => t.account_id === activeAccountId);
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
   const startBalance = activeAccount ? activeAccount.initialBalance : 0;
   const pnlSum = activeTrades.reduce((acc, t) => acc + t.pnl, 0);
   const totalBalance = startBalance + pnlSum;
 
-  // --- ACTIONS ---
-
-  const switchAccount = (id: string) => {
-    setActiveAccountId(id);
-  };
-
+  const switchAccount = (id: string) => setActiveAccountId(id);
   const addAccount = (name: string, balance: number, type: string) => {
-    const newAccount: Account = {
-      id: Date.now().toString(),
-      name,
-      initialBalance: balance,
-      type
-    };
+    const newAccount = { id: Date.now().toString(), name, initialBalance: balance, type };
     setAccounts([...accounts, newAccount]);
-    setActiveAccountId(newAccount.id); // Auto-switch to new account
-  };
-
-  const addTrade = (newTradeData: Omit<Trade, "id" | "accountId">) => {
-    const newTrade: Trade = {
-      ...newTradeData,
-      id: Date.now(),
-      accountId: activeAccountId, // Tag it with current account ID
-    };
-    
-    // Add to top of list (Newest first)
-    setAllTrades([newTrade, ...allTrades]);
-  };
-
-  const deleteTrade = (id: number) => {
-    setAllTrades((prev) => prev.filter((t) => t.id !== id));
+    setActiveAccountId(newAccount.id);
   };
 
   return (
     <TradeContext.Provider value={{ 
-      trades: activeTrades, // The app only sees these!
+      trades: activeTrades, 
       accounts,
       activeAccountId,
       switchAccount,
@@ -141,8 +157,6 @@ export function TradeProvider({ children }: { children: ReactNode }) {
 
 export function useTrades() {
   const context = useContext(TradeContext);
-  if (context === undefined) {
-    throw new Error("useTrades must be used within a TradeProvider");
-  }
+  if (context === undefined) throw new Error("useTrades must be used within a TradeProvider");
   return context;
 }
