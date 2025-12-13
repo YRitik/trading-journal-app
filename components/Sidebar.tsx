@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react"; // Added state
+import { useState } from "react";
 import { 
   LayoutDashboard, 
   BookOpen, 
   Wallet, 
   BarChart3, 
   Briefcase,
-  Calculator // Added Icon
+  Calculator 
 } from "lucide-react";
 import { useTrades } from "../context/TradeContext";
-import GoldCalculator from "./GoldCalculator"; // Import the calculator
+import RiskCalculator from "./RiskCalculator"; // Changed Import
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -26,13 +26,12 @@ export default function Sidebar() {
   const { accounts, activeAccountId } = useTrades();
   const activeAccount = accounts.find(a => a.id === activeAccountId);
   
-  // State for the Calculator Modal
   const [isCalcOpen, setIsCalcOpen] = useState(false);
 
   return (
     <>
-      {/* The Calculator Modal Component */}
-      <GoldCalculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} />
+      {/* Updated Component */}
+      <RiskCalculator isOpen={isCalcOpen} onClose={() => setIsCalcOpen(false)} />
 
       <div className="flex h-screen w-64 flex-col border-r border-white/5 bg-surface text-text-main">
         {/* Logo */}
@@ -65,20 +64,20 @@ export default function Sidebar() {
             );
           })}
 
-          {/* New "Tools" Section */}
+          {/* Tools Section */}
           <div className="pt-4 mt-4 border-t border-white/5">
             <p className="px-3 text-xs font-bold text-text-muted uppercase mb-2">Tools</p>
             <button
               onClick={() => setIsCalcOpen(true)}
-              className="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-card text-text-muted hover:bg-white/5 hover:text-yellow-400 transition-all duration-200"
+              className="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-card text-text-muted hover:bg-white/5 hover:text-primary transition-all duration-200"
             >
-              <Calculator className="mr-3 h-5 w-5 text-text-muted group-hover:text-yellow-400" />
-              Gold Calculator
+              <Calculator className="mr-3 h-5 w-5 text-text-muted group-hover:text-primary" />
+              Position Calculator
             </button>
           </div>
         </nav>
 
-        {/* User Account (Bottom) */}
+        {/* User Account */}
         <div className="border-t border-white/5 p-4">
           <div className="flex items-center gap-3 bg-black/20 p-3 rounded-card border border-white/5">
             <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center">

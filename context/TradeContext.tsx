@@ -3,29 +3,32 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 
 // --- TYPES ---
+
 export interface Trade {
   id: number;
-  accountId: string;
-  pair: string;
+  accountId: string;  // Links trade to a specific account (e.g., FTMO Challenge)
+  pair: string;       // e.g., XAUUSD
   type: "Buy" | "Sell";
   entry: number;
   exit: number;
+  stopLoss: number;   // New Field
+  lotSize: number;    // New Field
   pnl: number;
-  status: "Win" | "Loss";
-  date: string;
-  tags: string[]; // <--- NEW FIELD: The AI Tags
-  notes: string;  // <--- NEW FIELD: The user's story
+  status: "Win" | "Loss" | "BE"; // Status logic
+  date: string;       // Format: "YYYY-MM-DD" (Crucial for Calendar)
+  tags: string[];     // AI Psychology Tags
+  notes: string;      // User's journal notes
 }
 
 export interface Account {
   id: string;
-  name: string;
-  type: string;
+  name: string;      // e.g., "FTMO 100k"
+  type: string;      // e.g., "Challenge" or "Funded"
   initialBalance: number;
 }
 
 interface TradeContextType {
-  trades: Trade[];
+  trades: Trade[]; // Only returns trades for the ACTIVE account
   accounts: Account[];
   activeAccountId: string;
   switchAccount: (id: string) => void;
@@ -38,46 +41,81 @@ interface TradeContextType {
 const TradeContext = createContext<TradeContextType | undefined>(undefined);
 
 export function TradeProvider({ children }: { children: ReactNode }) {
+  // 1. Initialize Accounts (Default to one Personal account)
   const [accounts, setAccounts] = useState<Account[]>([{ 
-    id: "default", name: "Main Account", type: "Personal", initialBalance: 100000 
+    id: "default", 
+    name: "Main Account", 
+    type: "Personal", 
+    initialBalance: 100000 
   }]);
   
   const [activeAccountId, setActiveAccountId] = useState("default");
-  const [allTrades, setAllTrades] = useState<Trade[]>([]);
+  const [allTrades, setAllTrades] = useState<Trade[]>([]); // Stores trades for ALL accounts
 
+  // --- PERSISTENCE (Load from LocalStorage) ---
   useEffect(() => {
+    // Load Accounts
     const savedAccounts = localStorage.getItem("myAccounts");
-    if (savedAccounts) setAccounts(JSON.parse(savedAccounts));
+    if (savedAccounts) {
+      setAccounts(JSON.parse(savedAccounts));
+    }
+
+    // Load Trades
     const savedTrades = localStorage.getItem("myTrades");
-    if (savedTrades) setAllTrades(JSON.parse(savedTrades));
+    if (savedTrades) {
+      setAllTrades(JSON.parse(savedTrades));
+    }
   }, []);
 
+  // --- SAVE TO DISK (Run whenever data changes) ---
   useEffect(() => {
-    localStorage.setItem("myAccounts", JSON.stringify(accounts));
-    localStorage.setItem("myTrades", JSON.stringify(allTrades));
-  }, [accounts, allTrades]);
+    if (accounts.length > 0) {
+      localStorage.setItem("myAccounts", JSON.stringify(accounts));
+    }
+  }, [accounts]);
 
-  const activeTrades = allTrades.filter((t) => t.accountId === activeAccountId);
+  useEffect(() => {
+    // We save even if empty, to ensure deletions work
+    localStorage.setItem("myTrades", JSON.stringify(allTrades));
+  }, [allTrades]);
+
+
+  // --- HELPERS ---
   
+  // Filter trades to only show the ones for the ACTIVE account
+  const activeTrades = allTrades.filter((t) => t.accountId === activeAccountId);
+
+  // Calculate Balance for the ACTIVE account
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
   const startBalance = activeAccount ? activeAccount.initialBalance : 0;
   const pnlSum = activeTrades.reduce((acc, t) => acc + t.pnl, 0);
   const totalBalance = startBalance + pnlSum;
 
-  const switchAccount = (id: string) => setActiveAccountId(id);
+  // --- ACTIONS ---
+
+  const switchAccount = (id: string) => {
+    setActiveAccountId(id);
+  };
 
   const addAccount = (name: string, balance: number, type: string) => {
-    const newAccount: Account = { id: Date.now().toString(), name, initialBalance: balance, type };
+    const newAccount: Account = {
+      id: Date.now().toString(),
+      name,
+      initialBalance: balance,
+      type
+    };
     setAccounts([...accounts, newAccount]);
-    setActiveAccountId(newAccount.id);
+    setActiveAccountId(newAccount.id); // Auto-switch to new account
   };
 
   const addTrade = (newTradeData: Omit<Trade, "id" | "accountId">) => {
     const newTrade: Trade = {
       ...newTradeData,
       id: Date.now(),
-      accountId: activeAccountId,
+      accountId: activeAccountId, // Tag it with current account ID
     };
+    
+    // Add to top of list (Newest first)
     setAllTrades([newTrade, ...allTrades]);
   };
 
@@ -86,7 +124,16 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <TradeContext.Provider value={{ trades: activeTrades, accounts, activeAccountId, switchAccount, addAccount, addTrade, deleteTrade, totalBalance }}>
+    <TradeContext.Provider value={{ 
+      trades: activeTrades, // The app only sees these!
+      accounts,
+      activeAccountId,
+      switchAccount,
+      addAccount,
+      addTrade, 
+      deleteTrade, 
+      totalBalance 
+    }}>
       {children}
     </TradeContext.Provider>
   );
@@ -94,6 +141,8 @@ export function TradeProvider({ children }: { children: ReactNode }) {
 
 export function useTrades() {
   const context = useContext(TradeContext);
-  if (context === undefined) throw new Error("useTrades must be used within a TradeProvider");
+  if (context === undefined) {
+    throw new Error("useTrades must be used within a TradeProvider");
+  }
   return context;
 }

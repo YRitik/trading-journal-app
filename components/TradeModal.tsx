@@ -9,31 +9,13 @@ interface TradeModalProps {
   onSave: (tradeData: any) => void;
 }
 
-// --- THE AI LOGIC ---
+// Simple AI Tagging Logic
 const analyzePsychology = (text: string): string[] => {
   const lower = text.toLowerCase();
   const tags: string[] = [];
-
-  // Rule 1: FOMO (Fear Of Missing Out)
-  if (lower.includes("late") || lower.includes("chase") || lower.includes("missed") || lower.includes("fast")) {
-    tags.push("FOMO");
-  }
-
-  // Rule 2: Revenge Trading
-  if (lower.includes("recover") || lower.includes("back") || lower.includes("angry") || lower.includes("revenge")) {
-    tags.push("Revenge");
-  }
-
-  // Rule 3: Gambling / Lack of Confidence
-  if (lower.includes("hope") || lower.includes("guess") || lower.includes("maybe") || lower.includes("feel")) {
-    tags.push("Gambler");
-  }
-
-  // Rule 4: Disciplined / Technical
-  if (lower.includes("plan") || lower.includes("setup") || lower.includes("wait") || lower.includes("rules")) {
-    tags.push("Disciplined");
-  }
-
+  if (lower.includes("late") || lower.includes("chase")) tags.push("FOMO");
+  if (lower.includes("recover") || lower.includes("revenge")) tags.push("Revenge");
+  if (lower.includes("plan") || lower.includes("rules")) tags.push("Disciplined");
   return tags;
 };
 
@@ -44,31 +26,33 @@ export default function TradeModal({ isOpen, onClose, onSave }: TradeModalProps)
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const type = formData.get("type") as string;
     const entry = Number(formData.get("entry"));
     const exit = Number(formData.get("exit"));
+    const stopLoss = Number(formData.get("stopLoss"));
+    const lotSize = Number(formData.get("lotSize"));
+    const type = formData.get("type") as string;
     const notes = formData.get("notes") as string;
-
-    // Run the AI Analysis on the notes
-    const generatedTags = analyzePsychology(notes);
-
-    let calculatedPnl = 0;
-    if (type === "Buy") {
-      calculatedPnl = exit - entry;
-    } else {
-      calculatedPnl = entry - exit;
-    }
+    
+    // Auto-calculate PnL based on simple difference (for now)
+    // In a real app, we'd use the contract size math here
+    let rawDiff = type === "Buy" ? (exit - entry) : (entry - exit);
+    // Rough estimate: rawDiff * lotSize * (100 for Gold/ 100000 for Forex)
+    // For simplicity, let's let the user enter PnL manually or keep it simple:
+    // We will just use raw difference * lotSize * 100 (assuming Gold) for the demo
+    const calculatedPnl = Number((rawDiff * lotSize * 100).toFixed(2)); 
 
     const newTrade = {
       pair: formData.get("pair"),
-      type: type,
-      entry: entry,
-      exit: exit,
-      status: calculatedPnl >= 0 ? "Win" : "Loss",
-      pnl: Number(calculatedPnl.toFixed(2)),
-      date: new Date().toLocaleDateString(),
-      notes: notes,
-      tags: generatedTags, // Save the AI tags
+      type,
+      entry,
+      exit,
+      stopLoss, // New Field
+      lotSize,  // New Field
+      pnl: calculatedPnl,
+      status: calculatedPnl > 0 ? "Win" : calculatedPnl < 0 ? "Loss" : "BE",
+      date: new Date().toISOString().split('T')[0], // Save as YYYY-MM-DD for Calendar
+      notes,
+      tags: analyzePsychology(notes),
     };
 
     onSave(newTrade);
@@ -80,63 +64,66 @@ export default function TradeModal({ isOpen, onClose, onSave }: TradeModalProps)
       <div className="w-full max-w-lg bg-surface rounded-card border border-white/10 shadow-premium p-6 relative animate-in fade-in zoom-in duration-200">
         
         <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-text-main">Log New Trade</h2>
-            <span className="flex items-center gap-1 text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
-              <Sparkles className="w-3 h-3" /> AI Active
-            </span>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full text-text-muted hover:text-text-main transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-xl font-bold text-text-main">Log New Trade</h2>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full"><X className="w-5 h-5" /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           
+          {/* Row 1: Symbol & Type */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-text-muted uppercase">Symbol</label>
-              <input name="pair" required type="text" placeholder="e.g. XAUUSD" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main focus:border-primary focus:outline-none transition-colors" />
+              {/* Datalist gives us a dropdown + typing capability */}
+              <input list="pairs" name="pair" required placeholder="XAUUSD" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main" />
+              <datalist id="pairs">
+                <option value="XAUUSD" />
+                <option value="EURUSD" />
+                <option value="GBPUSD" />
+                <option value="BTCUSD" />
+                <option value="US30" />
+              </datalist>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-text-muted uppercase">Type</label>
-              <select name="type" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main focus:border-primary focus:outline-none transition-colors">
+              <select name="type" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main">
                 <option value="Buy">Buy (Long)</option>
                 <option value="Sell">Sell (Short)</option>
               </select>
             </div>
           </div>
 
+          {/* Row 2: Lot Size & Stop Loss */}
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+              <label className="text-xs font-medium text-text-muted uppercase">Lot Size</label>
+              <input name="lotSize" required type="number" step="0.01" placeholder="1.00" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-text-muted uppercase">Stop Loss</label>
+              <input name="stopLoss" required type="number" step="0.01" placeholder="Price" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main" />
+            </div>
+          </div>
+
+          {/* Row 3: Entry & Exit */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-text-muted uppercase">Entry Price</label>
-              <input name="entry" required type="number" step="0.01" placeholder="0.00" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main focus:border-primary focus:outline-none transition-colors" />
+              <input name="entry" required type="number" step="0.01" placeholder="0.00" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-text-muted uppercase">Exit Price</label>
-              <input name="exit" required type="number" step="0.01" placeholder="0.00" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main focus:border-primary focus:outline-none transition-colors" />
+              <input name="exit" required type="number" step="0.01" placeholder="0.00" className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main" />
             </div>
           </div>
 
+          {/* Notes */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-text-muted uppercase">Psychology Notes</label>
-            <textarea 
-              name="notes" 
-              placeholder="How were you feeling? (e.g., 'I chased the candle', 'Followed my plan')" 
-              rows={3} 
-              className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main focus:border-primary focus:outline-none transition-colors"
-            ></textarea>
-            <p className="text-[10px] text-text-muted">*AI will scan this for emotions.</p>
+            <label className="text-xs font-medium text-text-muted uppercase">Notes</label>
+            <textarea name="notes" placeholder="Psychology..." rows={2} className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-text-main"></textarea>
           </div>
 
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 py-3 bg-white/5 text-text-main font-bold rounded-lg hover:bg-white/10 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" className="flex-1 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 shadow-glow-blue transition-colors">
-              Save Analysis
-            </button>
-          </div>
+          <button type="submit" className="w-full py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 shadow-glow-blue">Save Trade</button>
 
         </form>
       </div>
