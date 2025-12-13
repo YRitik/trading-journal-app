@@ -9,16 +9,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// --- FIX: Interface uses camelCase (What the App expects) ---
 export interface Trade {
   id: number;
   user_id?: string;
-  account_id: string;
+  accountId: string; // App uses accountId
   pair: string;
   type: "Buy" | "Sell";
   entry: number;
-  exit: number;
-  stop_loss: number;
-  lot_size: number;
+  exit: number;      // App uses exit
+  stopLoss: number;  // App uses stopLoss
+  lotSize: number;   // App uses lotSize
   pnl: number;
   status: "Win" | "Loss" | "BE";
   date: string;
@@ -53,7 +54,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
   const [activeAccountId, setActiveAccountId] = useState("default");
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
 
-  // --- 1. FETCH TRADES FROM CLOUD ---
+  // --- 1. FETCH TRADES (Translate DB snake_case -> App camelCase) ---
   useEffect(() => {
     const fetchTrades = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -62,15 +63,25 @@ export function TradeProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from('trades')
         .select('*')
-        .order('id', { ascending: false }); // Newest first
+        .order('id', { ascending: false });
 
       if (data) {
-        // Map database fields to our app's format if needed
-        const formattedTrades = data.map(t => ({
-          ...t,
-          stopLoss: t.stop_loss, // Fix casing difference
-          lotSize: t.lot_size,   // Fix casing difference
-          exit: t.exit_price     // Fix naming difference
+        // MAPPING MAGIC: Convert DB format to App format
+        const formattedTrades: Trade[] = data.map((t: any) => ({
+          id: t.id,
+          user_id: t.user_id,
+          accountId: t.account_id, // Map account_id -> accountId
+          pair: t.pair,
+          type: t.type,
+          entry: t.entry,
+          exit: t.exit_price,      // Map exit_price -> exit
+          stopLoss: t.stop_loss,   // Map stop_loss -> stopLoss
+          lotSize: t.lot_size,     // Map lot_size -> lotSize
+          pnl: t.pnl,
+          status: t.status,
+          date: t.date,
+          tags: t.tags || [],
+          notes: t.notes
         }));
         setAllTrades(formattedTrades);
       }
@@ -79,7 +90,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     fetchTrades();
   }, []);
 
-  // --- 2. ADD TRADE TO CLOUD ---
+  // --- 2. ADD TRADE (Translate App camelCase -> DB snake_case) ---
   const addTrade = async (newTradeData: any) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -105,28 +116,35 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.from('trades').insert([dbTrade]).select();
 
     if (data) {
-      // Update local state instantly so UI updates
-      const savedTrade = {
-        ...data[0],
+      // Update local state immediately with the mapped format
+      const savedTrade: Trade = {
+        id: data[0].id,
+        user_id: data[0].user_id,
+        accountId: data[0].account_id,
+        pair: data[0].pair,
+        type: data[0].type,
+        entry: data[0].entry,
+        exit: data[0].exit_price,
         stopLoss: data[0].stop_loss,
         lotSize: data[0].lot_size,
-        exit: data[0].exit_price
+        pnl: data[0].pnl,
+        status: data[0].status,
+        date: data[0].date,
+        tags: data[0].tags,
+        notes: data[0].notes
       };
       setAllTrades([savedTrade, ...allTrades]);
     }
   };
 
-  // --- 3. DELETE TRADE FROM CLOUD ---
+  // --- 3. DELETE TRADE ---
   const deleteTrade = async (id: number) => {
-    // Delete from DB
     await supabase.from('trades').delete().eq('id', id);
-    
-    // Update local UI
     setAllTrades((prev) => prev.filter((t) => t.id !== id));
   };
 
   // --- CALCULATIONS ---
-  const activeTrades = allTrades.filter((t) => t.account_id === activeAccountId);
+  const activeTrades = allTrades.filter((t) => t.accountId === activeAccountId);
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
   const startBalance = activeAccount ? activeAccount.initialBalance : 0;
   const pnlSum = activeTrades.reduce((acc, t) => acc + t.pnl, 0);
